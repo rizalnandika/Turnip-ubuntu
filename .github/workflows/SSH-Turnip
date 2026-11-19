@@ -1,0 +1,67 @@
+# SSH Ubuntu via GitHub Workflow — TERPISAH dari workflow build Turnip
+# File ini cuma buat SSH manual, bukan buat build otomatis.
+# Workflow build Turnip yang satunya tetap bersih, tanpa tmate / tanpa SSH.
+#
+# CARA PAKAI:
+#   1. Upload file ini ke repo yang sama, di path:
+#      .github/workflows/ssh-ubuntu.yml
+#   2. Buka tab Actions > pilih "SSH Ubuntu" > Run workflow > Run workflow.
+#   3. Tunggu 1-2 menit, buka run itu, cari step "SSH via tmate".
+#      Di log-nya akan muncul:
+#        ssh <id>@nyc1.tmate.io
+#      dan link web shell:
+#        https://tmate.io/t/...
+#   4. SSH dari terminal HP / PC pakai perintah itu, atau buka link web
+#      shell-nya di browser. Kamu sudah di dalam Ubuntu 24.04 runner.
+#   5. Di dalam SSH itu kamu bisa compile Turnip manual, misal:
+#        sudo apt-get update
+#        # install paket yang kurang, tes Meson, dll.
+#        # kalau sudah berhasil dan ada file zip di $HOME / di workspace,
+#        # simpan dulu sebelum keluar, lihat langkah 6.
+#   6. Kalau sudah selesai, ketik 'exit' di SSH itu. Workflow akan lanjut
+#      ke step "Upload hasil kalau ada", dan kalau ada file
+#      Turnip-Ubuntu-26.1.0-R4-aarch64.zip di workspace, file itu akan
+#      di-upload jadi artifact.
+#   7. Maksimal SSH 6 jam per run. Ini cuma buat compile / debug Turnip
+#      ini saja, bukan server permanen.
+name: SSH Ubuntu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Info runner
+        run: |
+          lsb_release -a
+          uname -m
+          nproc
+          free -h
+          df -h
+
+      - name: SSH via tmate
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 330
+
+      - name: Upload hasil kalau ada
+        if: always()
+        run: |
+          ls -lh *.zip turnip-26.1.0 2>/dev/null || echo "Tidak ada file zip / hasil di workspace"
+          if [ -f Turnip-Ubuntu-26.1.0-R4-aarch64.zip ]; then
+            echo "Ada zip, akan di-upload sebagai artifact"
+          fi
+
+      - name: Upload artifact hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Turnip-Ubuntu-26.1.0-R4-aarch64
+          path: Turnip-Ubuntu-26.1.0-R4-aarch64.zip
+          retention-days: 90
+          if-no-files-found: ignore
