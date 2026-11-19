@@ -1,5 +1,5 @@
 # Build Turnip 26.1.0 R4 untuk Ubuntu (DroidSpaces) — GitHub Actions
-# v2 — apt digabung jadi 1x + cache, biar install paket tidak lama
+# v4 — pakai apt build-dep mesa:arm64, biar tidak tebak paket satu-satu lagi
 # Cross-compile: runner Ubuntu 24.04 x86_64 -> ARM64 Linux (glibc)
 #
 # CARA PAKAI:
@@ -64,6 +64,12 @@ jobs:
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $CODENAME-security main universe
           EOF
           sudo apt-get update
+          # CARA BIAR TIDAK UPLOAD ULANG TERUS:
+          # apt build-dep mesa:arm64 itu minta ke Ubuntu sendiri daftar
+          # SEMUA paket yang dibutuhkan untuk build Mesa, termasuk
+          # xcb-shm, wayland-egl-backend, dan yang belum ketemu berikutnya.
+          # Jadi tidak perlu tebak satu-satu lagi di workflow.
+          sudo apt-get build-dep -y -a arm64 mesa || echo "build-dep gagal / tidak ada deb-src, lanjut dengan daftar manual di bawah"
           # Dulu ini 3x apt install terpisah, tiap kali apt update + resolve
           # ulang, jadi lama. Sekarang 1x install semua, 1x resolve.
           sudo apt-get install -y --no-install-recommends \
@@ -80,6 +86,9 @@ jobs:
             libxfixes-dev:arm64 libxxf86vm-dev:arm64 \
             libxcb-glx0-dev:arm64 libxcb-dri2-0-dev:arm64 libxcb-dri3-dev:arm64 \
             libxcb-present-dev:arm64 libxcb-randr0-dev:arm64 libxshmfence-dev:arm64 \
+            libxcb-shm0-dev:arm64 libxcb-sync-dev:arm64 libxcb-xfixes-dev:arm64 \
+            libxcb-xkb-dev:arm64 libxcb-shape0-dev:arm64 libxkbcommon-dev:arm64 \
+            libxkbcommon-x11-dev:arm64 libxinerama-dev:arm64 libxcursor-dev:arm64 \
             libelf-dev:arm64 libexpat1-dev:arm64 libzstd-dev:arm64 zlib1g-dev:arm64
 
       - name: Meson baru dari pip + pkg-config ARM64
