@@ -1,5 +1,5 @@
 # Build Turnip 26.1.0 R4 untuk Ubuntu (DroidSpaces) — GitHub Actions
-# v4 — pakai apt build-dep mesa:arm64, biar tidak tebak paket satu-satu lagi
+# v5 — tambah SSH debug tmate kalau gagal (step ini saja)
 # Cross-compile: runner Ubuntu 24.04 x86_64 -> ARM64 Linux (glibc)
 #
 # CARA PAKAI:
@@ -56,7 +56,11 @@ jobs:
               echo "patch $f"
               sudo sed -i '/^Types:/a Architectures: amd64' "$f"
             fi
+            # Aktifkan deb-src supaya apt build-dep bisa jalan
+            # (runner GitHub default-nya Types: deb saja)
+            sudo sed -i 's/^Types: deb$/Types: deb deb-src/' "$f" || true
           done
+          grep -H "^Types:" /etc/apt/sources.list.d/*.sources || true
           sudo dpkg --add-architecture arm64 || true
           cat <<EOF | sudo tee /etc/apt/sources.list.d/arm64-ports.list
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $CODENAME main universe
@@ -86,7 +90,7 @@ jobs:
             libxfixes-dev:arm64 libxxf86vm-dev:arm64 \
             libxcb-glx0-dev:arm64 libxcb-dri2-0-dev:arm64 libxcb-dri3-dev:arm64 \
             libxcb-present-dev:arm64 libxcb-randr0-dev:arm64 libxshmfence-dev:arm64 \
-            libxcb-shm0-dev:arm64 libxcb-sync-dev:arm64 libxcb-xfixes-dev:arm64 \
+            libxcb-shm0-dev:arm64 libxcb-sync-dev:arm64 libxcb-xfixes0-dev:arm64 \
             libxcb-xkb-dev:arm64 libxcb-shape0-dev:arm64 libxkbcommon-dev:arm64 \
             libxkbcommon-x11-dev:arm64 libxinerama-dev:arm64 libxcursor-dev:arm64 \
             libelf-dev:arm64 libexpat1-dev:arm64 libzstd-dev:arm64 zlib1g-dev:arm64
@@ -168,6 +172,10 @@ jobs:
             -Dwerror=false \
             --force-fallback-for=spirv-tools,spirv-headers
 
+      - name: SSH debug kalau gagal
+        if: failure()
+        uses: mxschmitt/action-tmate@v3
+
       - name: Ninja build + install
         working-directory: turnip-build/mesa
         run: |
@@ -196,3 +204,4 @@ jobs:
           name: Turnip-Ubuntu-26.1.0-R4-aarch64
           path: Turnip-Ubuntu-26.1.0-R4-aarch64.zip
           retention-days: 90
+          
