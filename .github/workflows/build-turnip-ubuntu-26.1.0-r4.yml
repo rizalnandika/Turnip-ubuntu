@@ -1,11 +1,11 @@
 # Build Turnip 26.1.0 R4 untuk Ubuntu (DroidSpaces) — GitHub Actions
+# v2 — apt digabung jadi 1x + cache, biar install paket tidak lama
 # Cross-compile: runner Ubuntu 24.04 x86_64 -> ARM64 Linux (glibc)
 #
 # CARA PAKAI:
 #   1. Buat repo baru di GitHub (boleh repo kosong, misal: turnip-ubuntu-build).
 #   2. Upload file ini ke repo itu, di path:
 #      .github/workflows/build-turnip-ubuntu-26.1.0-r4.yml
-#      (di GitHub web: Add file > Create new file, ketik path di atas)
 #   3. Buka tab Actions di repo itu > pilih "Build Turnip Ubuntu 26.1.0 R4"
 #      > Run workflow > Run workflow.
 #   4. Tunggu sampai selesai (perkiraan 20-40 menit, jalan di background,
@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 120
     env:
       MESA_COMMIT: 1e1d8931c7de6316b2c7b4c2c20e370079c23402
+      DEBIAN_FRONTEND: noninteractive
       PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
       PKG_CONFIG_LIBDIR: /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
       PKG_CONFIG_SYSROOT_DIR: /
@@ -38,7 +39,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Batasi repo bawaan ke amd64, tambah repo ARM64
+      - name: Cache apt
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-noble-arm64-v2-${{ hashFiles('.github/workflows/build-turnip-ubuntu-26.1.0-r4.yml') }}
+          restore-keys: |
+            apt-noble-arm64-v2-
+
+      - name: Repo amd64 + ARM64, install SEMUA paket sekaligus
         run: |
           CODENAME="$(lsb_release -cs)"
           echo "Codename: $CODENAME"
@@ -54,17 +63,28 @@ jobs:
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $CODENAME-updates main universe
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $CODENAME-security main universe
           EOF
-          sudo apt-get update || true
-
-      - name: Install host tools
-        run: |
+          sudo apt-get update
+          # Dulu ini 3x apt install terpisah, tiap kali apt update + resolve
+          # ulang, jadi lama. Sekarang 1x install semua, 1x resolve.
           sudo apt-get install -y --no-install-recommends \
             meson ninja-build build-essential git python3-pip pkg-config \
             flex bison python3-mako python3-yaml \
-            glslang-tools libglvnd-dev libwayland-bin
+            glslang-tools libglvnd-dev libwayland-bin \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
+            libdrm-dev:arm64 libwayland-dev:arm64 wayland-protocols \
+            libdisplay-info-dev:arm64 libudev-dev:arm64 libxrandr-dev:arm64 \
+            libvulkan-dev:arm64 libegl-dev:arm64 libgbm-dev:arm64 \
+            libglvnd-dev:arm64 \
+            libx11-dev:arm64 libxext-dev:arm64 libxdamage-dev:arm64 \
+            libxfixes-dev:arm64 libxxf86vm-dev:arm64 \
+            libxcb-glx0-dev:arm64 libxcb-dri2-0-dev:arm64 libxcb-dri3-dev:arm64 \
+            libxcb-present-dev:arm64 libxcb-randr0-dev:arm64 libxshmfence-dev:arm64 \
+            libelf-dev:arm64 libexpat1-dev:arm64 libzstd-dev:arm64 zlib1g-dev:arm64
+
+      - name: Meson baru dari pip + pkg-config ARM64
+        run: |
           # Meson dari apt di Ubuntu 24.04 itu 1.3.2, sedangkan Mesa 26.1.0
           # butuh Meson >= 1.4.0 — jadi upgrade Meson dari pip.
-          # Tanpa ini Meson setup gagal: "Meson version is 1.3.2 but project requires >= 1.4.0"
           pip install --break-system-packages -U meson ninja mako
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
@@ -72,11 +92,6 @@ jobs:
           meson --version
           ninja --version
           command -v glslangValidator
-
-      - name: Install cross toolchain
-        run: |
-          sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross
           aarch64-linux-gnu-gcc --version | head -1
           sudo apt-get install -y pkg-config-aarch64-linux-gnu || {
             cat <<'WRAPPER' | sudo tee /usr/bin/aarch64-linux-gnu-pkg-config >/dev/null
@@ -88,19 +103,6 @@ jobs:
             sudo chmod +x /usr/bin/aarch64-linux-gnu-pkg-config
           }
           ls -l /usr/bin/aarch64-linux-gnu-pkg-config
-
-      - name: Install library ARM64
-        run: |
-          sudo apt-get install -y --no-install-recommends \
-            libdrm-dev:arm64 libwayland-dev:arm64 wayland-protocols \
-            libdisplay-info-dev:arm64 libudev-dev:arm64 libxrandr-dev:arm64 \
-            libvulkan-dev:arm64 libegl-dev:arm64 libgbm-dev:arm64 \
-            libglvnd-dev:arm64 \
-            libx11-dev:arm64 libxext-dev:arm64 libxdamage-dev:arm64 \
-            libxfixes-dev:arm64 libxxf86vm-dev:arm64 \
-            libxcb-glx0-dev:arm64 libxcb-dri2-0-dev:arm64 libxcb-dri3-dev:arm64 \
-            libxcb-present-dev:arm64 libxcb-randr0-dev:arm64 libxshmfence-dev:arm64 \
-            libelf-dev:arm64 libexpat1-dev:arm64 libzstd-dev:arm64 zlib1g-dev:arm64
           aarch64-linux-gnu-pkg-config --modversion libdrm
           aarch64-linux-gnu-pkg-config --modversion libdisplay-info
 
@@ -184,4 +186,3 @@ jobs:
           name: Turnip-Ubuntu-26.1.0-R4-aarch64
           path: Turnip-Ubuntu-26.1.0-R4-aarch64.zip
           retention-days: 90
-          
